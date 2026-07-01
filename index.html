@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ENAFEP résultats</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+}
+
+body{
+min-height:100vh;
+display:flex;
+justify-content:center;
+align-items:center;
+background:linear-gradient(-45deg,#0f172a,#1e3a8a,#0ea5e9,#0f172a);
+background-size:400% 400%;
+animation:gradientMove 12s ease infinite;
+color:white;
+padding:20px;
+}
+
+@keyframes gradientMove{
+0%{background-position:0% 50%;}
+50%{background-position:100% 50%;}
+100%{background-position:0% 50%;}
+}
+
+.container{
+width:100%;
+max-width:520px;
+background:rgba(255,255,255,.08);
+backdrop-filter:blur(15px);
+border-radius:25px;
+padding:30px;
+box-shadow:0 10px 35px rgba(0,0,0,.35);
+text-align:center;
+}
+
+.logo img{
+width:110px;
+height:110px;
+border-radius:50%;
+background:white;
+padding:8px;
+animation:float 3s ease-in-out infinite;
+margin-bottom:15px;
+}
+
+@keyframes float{
+0%,100%{transform:translateY(0);}
+50%{transform:translateY(-8px);}
+}
+
+h1{font-size:28px;margin-bottom:10px;}
+.session{color:#93c5fd;margin-bottom:10px;font-weight:bold;}
+.description{opacity:.9;margin-bottom:15px;}
+
+.info{
+background:rgba(255,255,255,.15);
+padding:12px;
+border-radius:12px;
+margin-bottom:20px;
+font-size:15px;
+}
+
+input{
+width:100%;
+padding:16px;
+border:none;
+border-radius:14px;
+font-size:16px;
+margin-top:10px;
+outline:none;
+}
+
+button{
+width:100%;
+padding:16px;
+margin-top:15px;
+border:none;
+border-radius:14px;
+font-size:17px;
+font-weight:bold;
+cursor:pointer;
+background:#22c55e;
+color:white;
+}
+
+button:hover{
+transform:scale(1.03);
+background:#16a34a;
+}
+
+.loader{
+width:45px;height:45px;margin:20px auto;
+border:5px solid white;
+border-top:5px solid #22c55e;
+border-radius:50%;
+animation:spin 1s linear infinite;
+}
+
+@keyframes spin{100%{transform:rotate(360deg);}}
+
+.card{
+margin-top:20px;
+background:white;
+color:#111;
+padding:22px;
+border-radius:18px;
+border-top:6px solid #22c55e;
+animation:fadeIn .5s ease;
+text-align:center;
+}
+
+.card h3{
+margin-bottom:10px;
+}
+
+.card p{
+margin:6px 0;
+font-size:15px;
+}
+
+.card hr{
+border:none;
+border-top:1px solid #ddd;
+margin:12px 0;
+}
+
+.attestation-zone{
+margin-top:15px;
+padding-top:15px;
+border-top:1px solid #eee;
+}
+
+.card button{
+width:100%;
+margin-top:10px;
+background:#1d4ed8;
+}
+
+.card button:hover{
+background:#1e40af;
+}
+
+@keyframes fadeIn{
+from{opacity:0;transform:translateY(20px);}
+to{opacity:1;transform:translateY(0);}
+}
+
+footer{
+margin-top:30px;
+font-size:13px;
+opacity:.8;
+text-align:center;
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="logo">
+<img src="logo.jpg">
+</div>
+
+<h1>📊 RÉSULTATS EXETAT-RDC</h1>
+
+<div class="session">Session 2026</div>
+
+<p class="description">Plateforme officielle de consultation</p>
+
+<div id="messageInfo" class="info">Bienvenue...</div>
+
+<input type="text" id="code" placeholder="Matricule 14 chiffres">
+
+<button onclick="chercher()">Consulter mon résultat</button>
+
+<div id="result"></div>
+
+<footer>
+<b>Nexora Edual</b><br>
+© 2026 Tous droits réservés
+</footer>
+
+</div>
+
+<script>
+
+const fichiers=[
+"data/kinshasa.json",
+"data/lualaba.json",
+"data/kongo-central.json",
+"data/kwilu.json",
+"data/kasaï.json"
+];
+
+// ================= SAFE =================
+function safe(v){
+return v && v.toString().trim() !== "" ? v : "Non disponible";
+}
+
+function getValue(obj, keys){
+for(let k of keys){
+if(obj[k] !== undefined && obj[k] !== null && obj[k] !== ""){
+return obj[k];
+}
+}
+return "Non disponible";
+}
+function detectNomComplet(e) {
+  const raw =
+    e["Nom complet"] ||
+    e["nom complet"] ||
+    e["Nom_Complet"] ||
+    e["NOM COMPLET"];
+
+  if (raw && typeof raw === "string") {
+    const parts = raw.trim().split(/\s+/);
+
+    return {
+      nom: parts[0] || "Non disponible",
+      postnom: parts[1] || "Non disponible",
+      prenom: parts.slice(2).join(" ") || "Non disponible"
+    };
+  }
+
+  return null;
+}
+
+function smartGet(obj, keys) {
+  for (let k in obj) {
+    if (keys.includes(k.toLowerCase()) && obj[k]) {
+      return obj[k];
+    }
+  }
+  return null;
+}
+
+function normaliser(e){
+
+// ===== CAS 1 : NOM COMPLET =====
+const full = detectNomComplet(e);
+
+if (full) {
+  return {
+    ...full,
+    matricule: getValue(e, ["matricule","Matricule","code","CODE"]),
+    ecole: getValue(e, ["ecole","Ecole","École","school"]),
+    province: getValue(e, ["province","Province"]),
+    option: getValue(e, ["option","Option"]),
+    note: getValue(e, ["note","Note","score"]),
+    mention: getValue(e, ["mention","Mention"])
+  };
+}
+
+// ===== CAS 2 : CHAMPS CLASSIQUES =====
+let nom = smartGet(e, ["nom"]);
+let postnom = smartGet(e, ["postnom","post nom","post-nom"]);
+let prenom = smartGet(e, ["prenom","prenon","prénom"]);
+
+// ===== CAS 3 : si tout est dans "nom" =====
+if (!postnom && nom) {
+  const parts = nom.split(" ");
+  nom = parts[0];
+  postnom = parts[1];
+  prenom = parts.slice(2).join(" ");
+}
+
+return {
+  nom: nom ? nom.trim() : "Non disponible",
+  postnom: postnom ? postnom.trim() : "Non disponible",
+  prenom: prenom ? prenom.trim() : "Non disponible",
+
+  matricule: getValue(e, ["matricule","Matricule","code","CODE"]),
+  ecole: getValue(e, ["ecole","Ecole","École","school"]),
+  province: getValue(e, ["province","Province"]),
+  option: getValue(e, ["option","Option"]),
+  note: getValue(e, ["note","Note","score"]),
+  mention: getValue(e, ["mention","Mention"])
+};
+}
+// ================= RECHERCHE =================
+async function chercher(){
+
+const code=document.getElementById("code").value.trim();
+const result=document.getElementById("result");
+
+if(!/^\d{14}$/.test(code)){
+result.innerHTML="<div class='card'>❌ Matricule invalide</div>";
+return;
+}
+
+result.innerHTML="<div class='loader'></div>";
+
+const responses=await Promise.all(
+fichiers.map(f=>fetch(f).then(r=>r.json()).catch(()=>null))
+);
+
+for(const data of responses){
+
+if(!data) continue;
+
+const eleve=data.map(normaliser).find(e=>e.matricule===code);
+
+if(eleve){
+
+window.eleveTrouve = eleve;
+
+result.innerHTML=`
+<div class="card">
+
+<h2>🎉 Félicitations</h2>
+
+<h3>${eleve.nom} ${eleve.postnom} ${eleve.prenom}</h3>
+
+<p>🏫 <b>École :</b> ${eleve.ecole}</p>
+<p>📍 <b>Province :</b> ${eleve.province}</p>
+<p>📘 <b>Option :</b> ${eleve.option}</p>
+
+<hr>
+
+<h3>📊 ${eleve.note}%</h3>
+<p>🏆 ${eleve.mention}</p>
+
+<div class="attestation-zone">
+<p>📄 Attestation officielle disponible</p>
+
+<button onclick="telechargerDiplome()">
+📥 Télécharger l’attestation de réussite
+</button>
+</div>
+
+</div>
+`;
+
+return;
+}
+}
+
+result.innerHTML="<div class='card'>❌ Aucun résultat trouvé</div>";
+}
+
+// ================= ENTER =================
+document.getElementById("code").addEventListener("keypress",e=>{
+if(e.key==="Enter") chercher();
+});
+
+// ================= PDF =================
+async function telechargerDiplome() {
+try {
+const eleve = window.eleveTrouve;
+if (!eleve) return alert("Aucun élève trouvé");
+
+const { jsPDF } = window.jspdf;  
+const doc = new jsPDF();  
+
+// LOGOS  
+const logoInspection = await loadImage("logo.png");  
+const drapeauRDC = await loadImage("rdc.png");  
+
+// CADRE  
+doc.setDrawColor(0, 40, 120);  
+doc.setLineWidth(1.2);  
+doc.rect(10, 10, 190, 277);  
+
+// HEADER  
+doc.setFillColor(0, 40, 120);  
+doc.rect(10, 10, 190, 32, "F");  
+
+// LOGO GAUCHE (INSPECTION)  
+doc.addImage(logoInspection, "PNG", 15, 12, 22, 22);  
+
+// LOGO DROITE (DRAPEAU RDC)  
+doc.addImage(drapeauRDC, "PNG", 173, 12, 22, 22);  
+
+// TEXTE HEADER  
+doc.setTextColor(255, 255, 255);  
+doc.setFontSize(12);  
+doc.text("RÉPUBLIQUE DÉMOCRATIQUE DU CONGO", 105, 20, { align: "center" });  
+
+doc.setFontSize(9);  
+doc.text(
+"MINISTÈRE DE L’ÉDUCATION NATIONALE ET NOUVELLE CITOYENNETÉ",
+105,
+28,
+{ align: "center" }
+);  
+
+// TITRE  
+doc.setTextColor(0, 0, 0);  
+doc.setFontSize(18);  
+doc.setFont("helvetica", "bold");  
+doc.text("ATTESTATION OFFICIELLE DE RÉUSSITE", 105, 55, { align: "center" });  
+
+doc.setFontSize(11);  
+doc.setFont("helvetica", "normal");  
+doc.text("ENAFEP 2026", 105, 63, { align: "center" });  
+
+doc.line(20, 68, 190, 68);  
+
+// INFOS  
+let y = 85;  
+
+doc.setFontSize(12);  
+doc.text("Nom complet :", 20, y);  
+doc.text(`${eleve.nom} ${eleve.postnom} ${eleve.prenom}`, 70, y);  
+
+y += 12;  
+doc.text("Matricule :", 20, y);  
+doc.text(eleve.matricule, 70, y);  
+
+y += 12;  
+doc.text("École :", 20, y);  
+doc.text(eleve.ecole, 70, y);  
+
+y += 12;  
+doc.text("Province :", 20, y);  
+doc.text(eleve.province, 70, y);  
+
+y += 12;  
+doc.text("Option :", 20, y);  
+doc.text(eleve.option, 70, y);  
+
+// RESULTAT  
+y += 18;  
+doc.setFontSize(16);  
+doc.setTextColor(0, 120, 0);  
+doc.text(`RÉSULTAT : ${eleve.note}%`, 105, y, { align: "center" });  
+
+y += 10;  
+doc.setFontSize(13);  
+doc.text(`MENTION : ${eleve.mention}`, 105, y, { align: "center" });  
+
+// ================= TEXTE JURIDIQUE ENCADRÉ =================
+y += 20;
+
+doc.setFontSize(11);
+
+// ====== BLOC 1 : DESCRIPTION ======
+const texte1 =
+"« La présente attestation est délivrée pour certifier que le(la) candidat(e) susnommé(e) a réussi avec succès les épreuves de l'Examen National de Fin d'Études Primaires (ENAFEP) de la République Démocratique du Congo.\n\nElle ouvre droit à l'admission dans l'enseignement secondaire, conformément à la réglementation en vigueur. »";
+const lines1 = doc.splitTextToSize(texte1, 160);
+// cadre bleu clair
+doc.setFillColor(235, 242, 255);
+doc.setDrawColor(0, 40, 120);
+doc.roundedRect(15, y - 6, 180, lines1.length * 6 + 10, 3, 3, "FD");
+
+// texte
+doc.setTextColor(0, 0, 0);
+doc.text(lines1, 20, y);
+
+y += lines1.length * 6 + 12;
+
+// ====== BLOC 2 : noter bien======
+const texte2 =
+"Noter bien :« Toute falsification, modification, contrefaçon ou usage irrégulier de la présente attestation est passible de poursuites judiciaires et des sanctions prévues par la législation en vigueur en République Démocratique du Congo. »";
+
+const lines2 = doc.splitTextToSize(texte2, 160);
+
+// cadre doré léger
+doc.setFillColor(255, 250, 235);
+doc.setDrawColor(212, 175, 55);
+doc.roundedRect(15, y - 6, 180, lines2.length * 6 + 10, 3, 3, "FD");
+
+// texte en italique
+doc.setFont("helvetica", "italic");
+doc.setTextColor(80, 60, 0);
+doc.text(lines2, 20, y);
+
+// reset style
+doc.setFont("helvetica", "normal");
+doc.setTextColor(0, 0, 0);
+// ================= PHOTO ÉLÈVE =================
+if (eleve.photo) {
+  // cadre autour de la photo
+  doc.setDrawColor(0);
+  doc.setLineWidth(0.5);
+  doc.rect(85, 205, 40, 40); // cadre
+
+  // image de l'élève
+  doc.addImage(eleve.photo, "PNG", 85, 205, 40, 40);
+
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text("Photo de l'élève", 105, 248, { align: "center" });
+}
+// ================= SIGNATURES (CADRES) =================
+doc.setDrawColor(0);
+doc.setLineWidth(0.5);
+
+// ===== CADRE PHOTO ÉLÈVE (DIRECTEUR) =====
+doc.rect(30, 255, 55, 30); // x, y, largeur, hauteur
+doc.setFontSize(9);
+doc.text("Photo élève", 57, 272, { align: "center" });
+
+
+// ===== CADRE MINISTRE (CACHEt) =====
+doc.rect(125, 255, 60, 30); // cadre cachet
+doc.setFontSize(9);
+doc.text("Cachet/Signature du ministre", 155, 272, { align: "center" });
+
+
+// ================= FOOTER =================
+doc.setFontSize(8);
+doc.setTextColor(120);
+
+// Ligne 1 (bien espacée)
+doc.text(
+"Produit généré par DKB NEXORA",
+105,
+293,
+{ align: "center" }
+);
+
+doc.save("attestation EXETAT-RDC.pdf");
+
+} catch (e) {
+console.error(e);
+alert("Erreur PDF : " + e.message);
+}
+} // ✅ FIN telechargerDiplome ICI
+// ================= IMAGE LOADER =================
+function loadImage(url) {
+return new Promise((resolve, reject) => {
+const img = new Image();
+img.crossOrigin = "anonymous";
+
+img.onload = () => {
+const canvas = document.createElement("canvas");
+canvas.width = img.width;
+canvas.height = img.height;
+
+const ctx = canvas.getContext("2d");
+ctx.drawImage(img, 0, 0);
+
+resolve(canvas.toDataURL("image/png"));
+};
+
+img.onerror = () => {
+reject(new Error("Impossible de charger l'image : " + url));
+};
+
+img.src = url;
+
+});
+}
+// ================= IMAGE LOADER =================
+function loadImage(url) {
+return new Promise((resolve, reject) => {
+const img = new Image();
+img.crossOrigin = "anonymous";
+
+img.onload = () => {  
+  const canvas = document.createElement("canvas");  
+  canvas.width = img.width;  
+  canvas.height = img.height;  
+
+  const ctx = canvas.getContext("2d");  
+  ctx.drawImage(img, 0, 0);  
+
+  resolve(canvas.toDataURL("image/png"));  
+};  
+
+img.onerror = () => {  
+  reject(new Error("Impossible de charger l'image : " + url));  
+};  
+
+img.src = url;
+
+});
+}
+</script>
+</body>
+</html>
